@@ -133,6 +133,8 @@ make_args(PL) ->
             snaplen,
             timeout,
             verbose,
+            no_lookupnet,
+            filter_incoming,
 
             filter
         ], proplists:lookup(Arg, PL) /= none ],
@@ -148,6 +150,8 @@ get_switch({snaplen, Arg})      -> "-s " ++ integer_to_list(Arg);
 get_switch({timeout, Arg})      -> "-t " ++ integer_to_list(Arg);
 get_switch({user, Arg})         -> "-u " ++ Arg;
 get_switch({verbose, Arg})      -> string:copies("-v ", Arg);
+get_switch({no_lookupnet, true})   -> "-N";
+get_switch({filter_incoming, true})-> "-I";
 get_switch({filter, Arg})       -> "\"" ++ Arg ++ "\"".
 
 progname() ->
