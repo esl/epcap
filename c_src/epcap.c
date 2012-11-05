@@ -89,6 +89,12 @@ main(int argc, char *argv[])
             case 'v':
                 ep->verbose++;
                 break;
+            case 'N':
+                ep->no_lookupnet = 1;
+                break;
+            case 'I':
+                ep->filter_in = 1;
+                break;
             case 'h':
             default:
                 usage(ep);
@@ -160,6 +166,10 @@ epcap_open(EPCAP_STATE *ep)
             (void)pcap_set_rfmon(ep->p, ep->rfmon);
     }
 
+    if (ep->filter_in) {
+      pcap_setdirection(ep->p, PCAP_D_IN);
+    }
+
     return (0);
 }
 
@@ -174,7 +184,8 @@ epcap_init(EPCAP_STATE *ep)
     u_int32_t ipmask = 0;
 
 
-    if (pcap_lookupnet(ep->dev, &ipaddr, &ipmask, errbuf) == -1) {
+    if (ep->no_lookupnet == 0 &&
+        pcap_lookupnet(ep->dev, &ipaddr, &ipmask, errbuf) == -1) {
         VERBOSE(1, "%s", errbuf);
         return (-1);
     }
@@ -192,7 +203,6 @@ epcap_init(EPCAP_STATE *ep)
     }
 
     return (0);
-
 }
 
 
@@ -301,7 +311,9 @@ usage(EPCAP_STATE *ep)
             "              -u <user>        unprivileged user\n"
             "              -s <length>      packet capture length\n"
             "              -t <millisecond> capture timeout\n"
-            "              -v               verbose mode\n",
+            "              -v               verbose mode\n"
+            "              -N               no lookupnet (allow to run on ipv4-less interface)\n"
+            "              -I               filter only incoming packets\n",
             __progname
             );
 

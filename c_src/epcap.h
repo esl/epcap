@@ -100,6 +100,9 @@ typedef struct {
     char *group;        /* run as unprivilted group */
     char *chroot;       /* chroot directory */
     char *file;         /* filename in case we read from pcap file */
+    int no_lookupnet;   /* skip lookupnet call, for ipv4-less interfaces to work */
+    int filter_in;      /* ask pcap to filter only incoming packets (to prevent flood
+                           caused by recapturing own sent packets) */
 } EPCAP_STATE;
 
 
