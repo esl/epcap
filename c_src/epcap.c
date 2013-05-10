@@ -56,7 +56,7 @@ main(int argc, char *argv[])
     ep->snaplen = SNAPLEN;
     ep->timeout = TIMEOUT;
 
-    while ( (ch = getopt(argc, argv, "d:f:g:hi:MPs:t:u:v:N:I")) != -1) {
+    while ( (ch = getopt(argc, argv, "d:f:g:hi:MPs:t:u:vNI")) != -1) {
         switch (ch) {
             case 'd':   /* chroot directory */
                 IS_NULL(ep->chroot = strdup(optarg));
