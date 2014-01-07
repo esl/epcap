@@ -186,19 +186,19 @@ epcap_init(EPCAP_STATE *ep)
 
     if (ep->no_lookupnet == 0 &&
         pcap_lookupnet(ep->dev, &ipaddr, &ipmask, errbuf) == -1) {
-        VERBOSE(1, "%s", errbuf);
+        VERBOSE(1, "%s\n", errbuf);
         return (-1);
     }
 
     VERBOSE(2, "[%s] Using filter: %s\n", __progname, ep->filt);
 
     if (pcap_compile(ep->p, &fcode, ep->filt, 1 /* optimize == true */, ipmask) != 0) {
-        VERBOSE(1, "pcap_compile: %s", pcap_geterr(ep->p));
+        VERBOSE(1, "pcap_compile: %s\n", pcap_geterr(ep->p));
         return (-1);
     }
 
     if (pcap_setfilter(ep->p, &fcode) != 0) {
-        VERBOSE(1, "pcap_setfilter: %s", pcap_geterr(ep->p));
+        VERBOSE(1, "pcap_setfilter: %s\n", pcap_geterr(ep->p));
         return (-1);
     }
 
@@ -219,18 +219,19 @@ epcap_loop(EPCAP_STATE *ep)
     while (read_packet) {
         switch (pcap_next_ex(p, &hdr, &pkt)) {
             case 0:     /* timeout */
-                VERBOSE(1, "timeout reading packet");
+                VERBOSE(1, "timeout reading packet\n");
                 break;
             case 1:     /* got packet */
+                VERBOSE(1, "got packet successfully\n");
                 epcap_response(hdr, pkt, datalink);
                 break;
             case -2:    /* eof */
-                VERBOSE(1, "end of file");
+                VERBOSE(1, "end of file\n");
                 epcap_ctrl("eof");
                 read_packet = 0;
                 break;
             case -1:    /* error reading packet */
-                VERBOSE(1, "error reading packet");
+                VERBOSE(1, "error reading packet\n");
                 /* fall through */
             default:
                 read_packet = 0;
