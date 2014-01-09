@@ -162,7 +162,15 @@ epcap_open(EPCAP_STATE *ep)
         if (ep->dev == NULL)
             PCAP_ERRBUF(ep->dev = pcap_lookupdev(errbuf));
 
-        PCAP_ERRBUF(ep->p = pcap_open_live(ep->dev, ep->snaplen, ep->promisc, ep->timeout, errbuf));
+        /* PCAP_ERRBUF(ep->p = pcap_open_live(ep->dev, ep->snaplen, ep->promisc, ep->timeout, errbuf)); */
+        ep->p = pcap_create(ep->dev, errbuf);
+        pcap_set_snaplen(ep->p, ep->snaplen);
+        pcap_set_promisc(ep->p, ep->promisc);
+        pcap_set_timeout(ep->p, ep->timeout);
+        if(pcap_set_buffer_size(ep->p, 1024) == -1){
+          VERBOSE(1, "Setting buffer size failed");
+        }
+        pcap_activate(ep->p);
 
         /* monitor mode */
         if (pcap_can_set_rfmon(ep->p) == 1)
