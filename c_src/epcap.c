@@ -30,8 +30,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <ei.h>
+#include <unistd.h>
 
 #include "epcap.h"
+
+
 
 int epcap_open(EPCAP_STATE *ep);
 int epcap_init(EPCAP_STATE *ep);
@@ -208,23 +211,29 @@ epcap_init(EPCAP_STATE *ep)
 
     void
 epcap_loop(EPCAP_STATE *ep)
-{
-    pcap_t *p = ep->p;
+    {
+      pcap_t *p = ep->p;
     struct pcap_pkthdr *hdr = NULL;
     const u_char *pkt = NULL;
 
+    struct pcap_stat stats;
     int read_packet = 1;
     int datalink = pcap_datalink(p);
 
+    int pkt_cnt = 0;
     while (read_packet) {
         switch (pcap_next_ex(p, &hdr, &pkt)) {
             case 0:     /* timeout */
                 VERBOSE(1, "timeout reading packet\n");
                 break;
             case 1:     /* got packet */
-                VERBOSE(1, "got packet successfully\n");
-                epcap_response(hdr, pkt, datalink);
-                break;
+              VERBOSE(1, "got packet successfully\n");
+              ++pkt_cnt;
+              if(pkt_cnt % 100 == 0 && pcap_stats(p, &stats) == 0) {
+                VERBOSE(1,"Recv: %u, Dropped:%u\n", stats.ps_recv, stats.ps_drop);
+              }
+              epcap_response(hdr, pkt, datalink);
+              break;
             case -2:    /* eof */
                 VERBOSE(1, "end of file\n");
                 epcap_ctrl("eof");
