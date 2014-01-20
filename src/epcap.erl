@@ -122,23 +122,23 @@ make_args(PL) ->
         false -> "sudo "
     end,
     proplists:get_value(progname, PL, Sudo ++ progname()) ++ " " ++
-    string:join([ get_switch(proplists:lookup(Arg, PL)) || Arg <- [
-            chroot,
-            group,
-            interface,
-            file,
-            monitor,
-            promiscuous,
-            user,
-            snaplen,
-            timeout,
-            verbose,
-            no_lookupnet,
-            filter_incoming,
-
-            filter
-        ], proplists:lookup(Arg, PL) /= none ],
-    " ").
+        string:join([ get_switch(proplists:lookup(Arg, PL))
+                      || Arg <- [chroot,
+                                 group,
+                                 interface,
+                                 file,
+                                 monitor,
+                                 promiscuous,
+                                 user,
+                                 snaplen,
+                                 timeout,
+                                 verbose,
+                                 stats_interval,
+                                 no_lookupnet,
+                                 filter_incoming,
+                                 filter,
+                                 buffer_size],
+                         proplists:lookup(Arg, PL) /= none ], " ").
 
 get_switch({chroot, Arg})       -> "-d " ++ Arg;
 get_switch({file, Arg})         -> "-f " ++ Arg;
@@ -150,6 +150,7 @@ get_switch({snaplen, Arg})      -> "-s " ++ integer_to_list(Arg);
 get_switch({timeout, Arg})      -> "-t " ++ integer_to_list(Arg);
 get_switch({user, Arg})         -> "-u " ++ Arg;
 get_switch({verbose, Arg})      -> string:copies("-v ", Arg);
+get_switch({stats_interval, Arg})  -> "-S " ++ integer_to_list(Arg);
 get_switch({no_lookupnet, true})   -> "-N";
 get_switch({filter_incoming, true})-> "-I";
 get_switch({filter, Arg})       -> "\"" ++ Arg ++ "\"".
