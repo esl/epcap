@@ -123,4 +123,3 @@ typedef struct {
 
 int epcap_priv_drop(EPCAP_STATE *ep);
 void epcap_priv_issetuid(EPCAP_STATE *ep);
-

@@ -39,6 +39,7 @@
 #define NOW_STRING(buffer) fill_buffer_with_current_time(buffer, sizeof(buffer))
 
 int epcap_open(EPCAP_STATE *ep);
+void epcap_open_live(EPCAP_STATE *ep, char *errbuf);
 int epcap_init(EPCAP_STATE *ep);
 void epcap_loop(EPCAP_STATE *ep);
 void epcap_ctrl(const char *ctrl_evt);
@@ -113,6 +114,9 @@ main(int argc, char *argv[])
             case 'I':
                 ep->filter_in = 1;
                 break;
+            case 'b':
+                ep->buffer_size = atoi(optarg);
+                break;
             case 'h':
             default:
                 usage(ep);
@@ -177,7 +181,7 @@ epcap_open(EPCAP_STATE *ep)
         if (ep->dev == NULL)
             PCAP_ERRBUF(ep->dev = pcap_lookupdev(errbuf));
 
-        PCAP_ERRBUF(ep->p = pcap_open_live(ep->dev, ep->snaplen, ep->promisc, ep->timeout, errbuf));
+        epcap_open_live(ep, errbuf);
 
         /* monitor mode */
         if (pcap_can_set_rfmon(ep->p) == 1)
@@ -189,6 +193,21 @@ epcap_open(EPCAP_STATE *ep)
     }
 
     return (0);
+}
+
+    void
+epcap_open_live(EPCAP_STATE *ep, char *errbuf)
+{
+    PCAP_ERRBUF(ep->p = pcap_create(ep->dev, errbuf));
+    IS_LTZERO(pcap_set_snaplen(ep->p, ep->snaplen));
+    IS_LTZERO(pcap_set_promisc(ep->p, ep->promisc));
+    IS_LTZERO(pcap_set_timeout(ep->p, ep->timeout));
+    if(ep->buffer_size != DO_NOT_SET_BUFFER_SIZE) {
+        IS_LTZERO(pcap_set_buffer_size(ep->p, ep->buffer_size));
+        VERBOSE(2, "[%s]: pcap buffer size set to %d bytes\n\r",
+                __progname, ep->buffer_size);
+    }
+    IS_LTZERO(pcap_activate(ep->p));
 }
 
 

@@ -153,7 +153,8 @@ get_switch({verbose, Arg})      -> string:copies("-v ", Arg);
 get_switch({stats_interval, Arg})  -> "-S " ++ integer_to_list(Arg);
 get_switch({no_lookupnet, true})   -> "-N";
 get_switch({filter_incoming, true})-> "-I";
-get_switch({filter, Arg})       -> "\"" ++ Arg ++ "\"".
+get_switch({filter, Arg})       -> "\"" ++ Arg ++ "\"";
+get_switch({buffer_size, Arg})  -> "-b " ++ integer_to_list(Arg).
 
 progname() ->
     filename:join([
