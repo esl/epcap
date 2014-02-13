@@ -30,18 +30,32 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <ei.h>
+#include <unistd.h>
+#include <signal.h>
+#include <time.h>
 
 #include "epcap.h"
 
+#define NOW_STRING(buffer) fill_buffer_with_current_time(buffer, sizeof(buffer))
+
 int epcap_open(EPCAP_STATE *ep);
+void epcap_open_live(EPCAP_STATE *ep, char *errbuf);
 int epcap_init(EPCAP_STATE *ep);
 void epcap_loop(EPCAP_STATE *ep);
 void epcap_ctrl(const char *ctrl_evt);
 void epcap_response(struct pcap_pkthdr *hdr, const u_char *pkt, unsigned int datalink);
 void epcap_send_free(ei_x_buff *msg);
 void epcap_watch();
+void init_stats_state(EPCAP_STATE *ep);
+void register_stats_signal_handler(EPCAP_STATE *ep);
+void set_stats_timer(EPCAP_STATE *ep);
+void log_stats(int signo);
+char *fill_buffer_with_current_time(char *buffer, int buffer_size);
+void block_sig_alarm();
+void unblock_sig_alarm();
 void usage(EPCAP_STATE *ep);
 
+STATS_STATE ss;
 
     int
 main(int argc, char *argv[])
@@ -55,9 +69,11 @@ main(int argc, char *argv[])
 
     ep->snaplen = SNAPLEN;
     ep->timeout = TIMEOUT;
+    ep->buffer_size = DO_NOT_SET_BUFFER_SIZE;
+    ep->stats_interval_in_sec = DEFAULT_STATS_INTERVAL_IN_SEC;
 
-    while ( (ch = getopt(argc, argv, "d:f:g:hi:MPs:t:u:vNI")) != -1) {
-        switch (ch) {
+    while ( (ch = getopt(argc, argv, "d:f:g:hi:MPs:t:u:vS:NIb:")) != -1) {
+      switch (ch) {
             case 'd':   /* chroot directory */
                 IS_NULL(ep->chroot = strdup(optarg));
                 break;
@@ -89,11 +105,17 @@ main(int argc, char *argv[])
             case 'v':
                 ep->verbose++;
                 break;
+            case 'S':
+                ep->stats_interval_in_sec = atoi(optarg);
+                break;
             case 'N':
                 ep->no_lookupnet = 1;
                 break;
             case 'I':
                 ep->filter_in = 1;
+                break;
+            case 'b':
+                ep->buffer_size = atoi(optarg);
                 break;
             case 'h':
             default:
@@ -159,7 +181,7 @@ epcap_open(EPCAP_STATE *ep)
         if (ep->dev == NULL)
             PCAP_ERRBUF(ep->dev = pcap_lookupdev(errbuf));
 
-        PCAP_ERRBUF(ep->p = pcap_open_live(ep->dev, ep->snaplen, ep->promisc, ep->timeout, errbuf));
+        epcap_open_live(ep, errbuf);
 
         /* monitor mode */
         if (pcap_can_set_rfmon(ep->p) == 1)
@@ -171,6 +193,21 @@ epcap_open(EPCAP_STATE *ep)
     }
 
     return (0);
+}
+
+    void
+epcap_open_live(EPCAP_STATE *ep, char *errbuf)
+{
+    PCAP_ERRBUF(ep->p = pcap_create(ep->dev, errbuf));
+    IS_LTZERO(pcap_set_snaplen(ep->p, ep->snaplen));
+    IS_LTZERO(pcap_set_promisc(ep->p, ep->promisc));
+    IS_LTZERO(pcap_set_timeout(ep->p, ep->timeout));
+    if(ep->buffer_size != DO_NOT_SET_BUFFER_SIZE) {
+        IS_LTZERO(pcap_set_buffer_size(ep->p, ep->buffer_size));
+        VERBOSE(2, "[%s]: pcap buffer size set to %d bytes\n\r",
+                __progname, ep->buffer_size);
+    }
+    IS_LTZERO(pcap_activate(ep->p));
 }
 
 
@@ -186,19 +223,19 @@ epcap_init(EPCAP_STATE *ep)
 
     if (ep->no_lookupnet == 0 &&
         pcap_lookupnet(ep->dev, &ipaddr, &ipmask, errbuf) == -1) {
-        VERBOSE(1, "%s", errbuf);
+        VERBOSE(1, "%s\n\r", errbuf);
         return (-1);
     }
 
-    VERBOSE(2, "[%s] Using filter: %s\n", __progname, ep->filt);
+    VERBOSE(2, "[%s] Using filter: %s\n\r", __progname, ep->filt);
 
     if (pcap_compile(ep->p, &fcode, ep->filt, 1 /* optimize == true */, ipmask) != 0) {
-        VERBOSE(1, "pcap_compile: %s", pcap_geterr(ep->p));
+        VERBOSE(1, "[%s] Pcap_compile: %s\n\r", __progname, pcap_geterr(ep->p));
         return (-1);
     }
 
     if (pcap_setfilter(ep->p, &fcode) != 0) {
-        VERBOSE(1, "pcap_setfilter: %s", pcap_geterr(ep->p));
+        VERBOSE(1, "[%s] Pcap_setfilter: %s\n\r", __progname, pcap_geterr(ep->p));
         return (-1);
     }
 
@@ -215,22 +252,38 @@ epcap_loop(EPCAP_STATE *ep)
 
     int read_packet = 1;
     int datalink = pcap_datalink(p);
+    char time_buffer[TIME_BUFFER_SIZE];
+
+    if(ep->verbose == 2) {
+      init_stats_state(ep);
+      register_stats_signal_handler(ep);
+      set_stats_timer(ep);
+    }
 
     while (read_packet) {
         switch (pcap_next_ex(p, &hdr, &pkt)) {
             case 0:     /* timeout */
-                VERBOSE(1, "timeout reading packet");
+                VERBOSE(1, "[%s][%s][%s]: Timeout reading packet\n\r",
+                        __progname, NOW_STRING(time_buffer), ep->dev);
                 break;
             case 1:     /* got packet */
+                VERBOSE(2, "[%s][%s][%s]: Got packet successfully\n\r",
+                        __progname, NOW_STRING(time_buffer), ep->dev);
+                block_sig_alarm();
                 epcap_response(hdr, pkt, datalink);
+                unblock_sig_alarm();
                 break;
             case -2:    /* eof */
-                VERBOSE(1, "end of file");
+                VERBOSE(1, "[%s][%s][%s]: End of file\n\r",
+                        __progname, NOW_STRING(time_buffer), ep->dev);
+                block_sig_alarm();
                 epcap_ctrl("eof");
+                unblock_sig_alarm();
                 read_packet = 0;
                 break;
             case -1:    /* error reading packet */
-                VERBOSE(1, "error reading packet");
+                VERBOSE(1, "[%s][%s][%s]: Error reading packet\n\r",
+                        __progname, NOW_STRING(time_buffer), ep->dev);
                 /* fall through */
             default:
                 read_packet = 0;
@@ -294,6 +347,74 @@ void epcap_send_free(ei_x_buff *msg)
         errx(EXIT_FAILURE, "write packet failed: %d", msg->index);
 
     ei_x_free(msg);
+}
+
+void init_stats_state(EPCAP_STATE *ep)
+{
+  ss.p = ep->p;
+  ss.dev = ep->dev;
+}
+
+void register_stats_signal_handler(EPCAP_STATE *ep)
+{
+  struct sigaction action;
+
+  action.sa_handler = log_stats;
+  sigfillset(&action.sa_mask);
+  action.sa_flags = 0;
+  sigaction(SIGALRM, &action, 0);
+}
+
+void set_stats_timer(EPCAP_STATE *ep)
+{
+  struct itimerval timer_settings;
+
+  timer_settings.it_interval.tv_sec = ep->stats_interval_in_sec;
+  timer_settings.it_interval.tv_usec = 0;
+  timer_settings.it_value.tv_sec = ep->stats_interval_in_sec;
+  timer_settings.it_value.tv_usec = 0;
+  IS_LTZERO(setitimer(ITIMER_REAL, &timer_settings, NULL));
+}
+
+void log_stats(int signo)
+{
+  struct pcap_stat stats;
+  char time_buffer[TIME_BUFFER_SIZE];
+
+  if(pcap_stats(ss.p, &stats) != 0) {
+      fprintf(stderr, "[%s][%s][%s]: Error reading statistics\n\r", __progname,
+              NOW_STRING(time_buffer), ss.dev);
+  } else {
+      fprintf(stderr, "[%s][%s][%s]: Capture statistics: Received: %u, Dropped:%u\n\r",
+              __progname, NOW_STRING(time_buffer), ss.dev,
+              stats.ps_recv, stats.ps_drop);
+  }
+}
+
+char *fill_buffer_with_current_time(char *buffer, int buffer_size)
+{
+  time_t timer = time(NULL);
+
+  strftime(buffer, buffer_size, "%c", localtime(&timer));
+  return buffer;
+}
+
+void block_sig_alarm()
+{
+  sigset_t sigset;
+
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGALRM);
+  sigprocmask(SIG_BLOCK, &sigset, NULL);
+}
+
+void unblock_sig_alarm()
+{
+  sigset_t sigset;
+
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGALRM);
+  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
 }
 
     void

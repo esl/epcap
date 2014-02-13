@@ -56,6 +56,14 @@
 
 #define EPCAP_FILTER    "tcp and port 80"
 
+#define TIME_BUFFER_SIZE 25
+
+/* If buffer size won't be set, pcap will calculate the value */
+#define DO_NOT_SET_BUFFER_SIZE 0
+
+/* Stats logs printing interval in seconds */
+#define DEFAULT_STATS_INTERVAL_IN_SEC 5
+
 #define PCAP_ERRBUF(x) do { \
     if ((x) == NULL) \
     errx(EXIT_FAILURE, "%s: %s", #x, errbuf); \
@@ -103,9 +111,15 @@ typedef struct {
     int no_lookupnet;   /* skip lookupnet call, for ipv4-less interfaces to work */
     int filter_in;      /* ask pcap to filter only incoming packets (to prevent flood
                            caused by recapturing own sent packets) */
+    int buffer_size;    /* pcap buffer size for capture packets */
+    int stats_interval_in_sec;    /* stats logs printing interval in seconds  */
 } EPCAP_STATE;
+
+typedef struct {
+  pcap_t *p;            /* pcap handle */
+  char *dev;            /* device to snoop */
+} STATS_STATE;
 
 
 int epcap_priv_drop(EPCAP_STATE *ep);
 void epcap_priv_issetuid(EPCAP_STATE *ep);
-
