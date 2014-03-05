@@ -97,7 +97,12 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Port communication
 %%--------------------------------------------------------------------
 handle_info({Port, {data, Data}}, #state{port = Port, pid = Pid} = State) ->
-    Pid ! binary_to_term(Data),
+    case erlang:process_info(Pid, message_queue_len) of
+        {message_queue_len, N} when N > 1000 ->
+            drop;
+        {message_queue_len, _LowerN} ->
+            Pid ! binary_to_term(Data)
+    end,
     {noreply, State};
 
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) when Status > 128 ->
