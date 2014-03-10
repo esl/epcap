@@ -33,15 +33,16 @@
 
 -define(SERVER, ?MODULE).
 
--export([start/0, start/1, start/2, stop/0, stop/1]).
+-export([start/0, start/1, start/2, stop/0, stop/1, block/1, unblock/1]).
 -export([start_link/2]).
 -export([progname/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
             terminate/2, code_change/3]).
 
 -record(state, {
-    pid,
-    port
+          pid,
+          port,
+          port_state = forwarding
 }).
 
 
@@ -51,6 +52,14 @@ start(Options) ->
     start_link(self(), Options).
 start(Pid, Options) when is_pid(Pid), is_list(Options) ->
     start_link(Pid, Options).
+
+block(Pid) ->
+    io:format("Pid ~p starts blocking...~n", [Pid]),
+    gen_server:cast(Pid, block).
+
+unblock(Pid) ->
+    io:format("Pid ~p starts forwarding...~n", [Pid]),
+    gen_server:cast(Pid, unblock).
 
 stop() ->
     gen_server:call(?SERVER, stop).
@@ -80,6 +89,10 @@ init([Pid, Options]) ->
 handle_call(stop, _From, State) ->
     {stop, normal, ok, State}.
 
+handle_cast(block, State) ->
+    {noreply, State#state{port_state = blocking}};
+handle_cast(unblock, State) ->
+    {noreply, State#state{port_state = forwarding}};
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
@@ -96,8 +109,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Port communication
 %%--------------------------------------------------------------------
-handle_info({Port, {data, Data}}, #state{port = Port, pid = Pid} = State) ->
+handle_info({Port, {data, Data}}, #state{port = Port, pid = Pid, port_state = forwarding} = State) ->
     Pid ! binary_to_term(Data),
+    {noreply, State};
+handle_info({Port, _}, #state{port = Port, pid = _Pid, port_state = blocking} = State) ->
     {noreply, State};
 
 handle_info({Port, {exit_status, Status}}, #state{port = Port} = State) when Status > 128 ->
