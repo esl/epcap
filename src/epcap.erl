@@ -161,7 +161,8 @@ progname() ->
             filename:dirname(code:which(?MODULE)),
             "..",
             "priv",
-            ?MODULE
+            %% use atom_to_list, to make dialyzer in R15 happy
+            atom_to_list(?MODULE)
         ]).
 
 chroot_path() ->
